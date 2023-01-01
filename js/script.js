@@ -52,7 +52,7 @@ function playSePlayer(sound) {
 }
 
 // массив с названием фоновых музык игры
-const bgMusicsArr = ['bgm_deep_space', 'bgm_space'];
+const bgMusicsArr = ['bgm_hard_times', 'bgm_deep_space', 'bgm_space'];
 let bgMusicIndex = 0; // начинать проигрование фоновой музыки с первой
 
 // функция для проигрования фоновых музык по очереди
@@ -141,6 +141,9 @@ function gameOver() {
     isGameStart = false; // меняем состояние игры (останавливаем обновление холста)
     ctx.clearRect(0, 0, vw, vh); // числим весь холст
 
+    BG_MUSIC.src = SOUNDS_PATH + 'bgm_gameover' + '.mp3';
+    BG_MUSIC.play();
+
     // создаем блок с текстом "GAME OVER"
     const message = document.createElement('div');
     message.id = 'finalMessage';
@@ -177,19 +180,49 @@ function message(text) {
  */
 
 // сколько нужно сбить астеройдов для победы
-const levelToWin = 50;
+const levelToWin = 100;
 
 // начальные очки и уровень (число сбитых астеройдов)
 let score = 0;
 let level = 0;
 
 // начальные деньги и броня
-let money = 0;
+let money = 1500;
 let armor = 100;
+let maxArmor = armor;
 
-// стоимости улучшения оружия и ремонта
-let upgradeCost = 100;
+// добавление брони при апгрейде
+let upgradeAddArmor = 10;
+// добавление к ремонту при улучшении брони
+let upgradeAddRepair = 5;
+// стоимость улучшения брони
+let upgradeArmorCost = 500;
+
+// восстановление брони при ремонте
+let repairArmorAdd = 50
+// стоимость ремонта брони
 let repairCost = 500;
+
+// сила атаки оружия
+let laserGunPower = 100;
+// коэффициент добаление силы
+let laserGunPowerScale = 1.1;
+// стоимости улучшения силы оружия
+let upgradePowerCost = 200;
+
+// расстояние от угла до центра экрана
+let distanceToScreenCenter = Math.sqrt( Math.pow(vcx, 2) + Math.pow(vcy, 2) );
+// скорость наведения оружия (пикселей в секунду (1000ms))
+let aimingSpeed = (distanceToScreenCenter / 5) / 1000;
+// коэффициент увеличения скорости наведения
+let aimingSpeedScale = 1.2;
+// стоимость улучшения наведения оружия
+let upgradeAimingCost = 200;
+
+// скорость перезярядки и коэффициент увеличения скорости перезарядки в объекте cursor
+
+// стоимость улучшения скорости перезарядки оружия
+let upgradeReloadingCost = 200
 
 // левая панель
 const leftBoard = document.createElement('div');
@@ -219,25 +252,55 @@ leftBoard.append(moneyDiv);
 const rightBoard = document.createElement('div');
 rightBoard.classList.add( 'board', 'right-board');
 
-// апгрейт пушки
-const upgradeDiv = document.createElement('div');
-upgradeDiv.className = 'upgrade';
-upgradeDiv.innerHTML = `<span>Score coast\n${upgradeCost}</span>`;
-upgradeDiv.onclick = function() {
+// апгрейт силы выстрела
+const upgradePowerDiv = document.createElement('div');
+upgradePowerDiv.className = 'upgrade-power';
+upgradePowerDiv.innerHTML = `<span>${upgradePowerCost} $ (Q)</span>`;
+upgradePowerDiv.onclick = function() {
     isButtonOnclick = true;
-    getClickUpgrade();
+    getClickUpgradePower();
 }
-rightBoard.append(upgradeDiv);
+rightBoard.append(upgradePowerDiv);
+
+// апгрейт скорости прицеливания
+const upgradeAimingDiv = document.createElement('div');
+upgradeAimingDiv.className = 'upgrade-aiming';
+upgradeAimingDiv.innerHTML = `<span>${upgradeAimingCost} $ (W)</span>`;
+upgradeAimingDiv.onclick = function() {
+    isButtonOnclick = true;
+    getClickUpgradeAiming();
+}
+rightBoard.append(upgradeAimingDiv);
+
+// апгрейт скорости перезарядки
+const upgradeReloadingDiv = document.createElement('div');
+upgradeReloadingDiv.className = 'upgrade-reloading';
+upgradeReloadingDiv.innerHTML = `<span>${upgradeReloadingCost} $ (E)</span>`;
+upgradeReloadingDiv.onclick = function() {
+    isButtonOnclick = true;
+    getClickUpgradeReloading();
+}
+rightBoard.append(upgradeReloadingDiv);
 
 // ремонт
 const repairDiv = document.createElement('div');
 repairDiv.className = 'repair';
-repairDiv.innerHTML = `<span>Score coast\n${repairCost}</span>`;
+repairDiv.innerHTML = `<span>${repairCost} $ (R)</span>`;
 repairDiv.onclick = function() {
     isButtonOnclick = true;
     getClickRepair();
 }
 rightBoard.append(repairDiv);
+
+// улучшение защиты и ремонта
+const upgradeArmorDiv = document.createElement('div');
+upgradeArmorDiv.className = 'upgrade-armor';
+upgradeArmorDiv.innerHTML = `<span>${repairCost} $ (T)</span>`;
+upgradeArmorDiv.onclick = function() {
+    isButtonOnclick = true;
+    getClickUpgradeArmor();
+}
+rightBoard.append(upgradeArmorDiv);
 
 // функция обновления информации на понелях
 function boardUpdate() {
@@ -245,35 +308,80 @@ function boardUpdate() {
     armorDiv.innerText = `ARMOR: ${armor}%`;
     scoreDiv.innerText = `SCORE: ${('0000000' + score).slice(-7)}`;
     moneyDiv.innerText = `$: ${money}`;
-    repairDiv.classList.toggle('grayscale', money < repairCost || armor === 100);
-    upgradeDiv.classList.toggle('grayscale', money < upgradeCost);
+    repairDiv.classList.toggle('grayscale', money < repairCost || armor === maxArmor);
+    upgradeArmorDiv.classList.toggle('grayscale', money < upgradeArmorCost);
+    upgradeAimingDiv.classList.toggle('grayscale', money < upgradeAimingCost);
+    upgradeReloadingDiv.classList.toggle('grayscale', money < upgradeReloadingCost);
+    upgradePowerDiv.classList.toggle('grayscale', money < upgradePowerCost);
 }
 
-// попытка улучшить пушку
-function getClickUpgrade() {
-    if (money >= upgradeCost) {
-        money -= upgradeCost;
+// попытка улучшить силу оружия
+function getClickUpgradePower() {
+    if (money >= upgradePowerCost) {
+        playSePlayer('se_upgrade');
+        money -= upgradePowerCost;
 
-        aim.speed += aim.speedAdd;
+        laserGunPower *= laserGunPowerScale;
 
         boardUpdate();
-        message('AIM SPEED = ' + (aim.speed * 10).toFixed(2));
+        message('POWER = ' + laserGunPower.toFixed());
+    }
+}
+
+// попытка улучшить скорость наведения
+function getClickUpgradeAiming() {
+    if (money >= upgradeAimingCost) {
+        playSePlayer('se_upgrade');
+        money -= upgradeAimingCost;
+
+        aimingSpeed *= aimingSpeedScale;
+
+        boardUpdate();
+        message('AIM SPEED = ' + (aimingSpeed * 1000).toFixed() + ' px/s');
+    }
+}
+
+// попытка улучшить скорость перезарядки
+function getClickUpgradeReloading() {
+    if (money >= upgradeReloadingCost) {
+        playSePlayer('se_upgrade');
+        money -= upgradeReloadingCost;
+
+        cursor.reloadTimeout *= cursor.reloadTimeoutScale;
+
+        boardUpdate();
+        message('RELOADING = ' + (cursor.reloadTimeout * cursor.frames / 1000).toFixed(2) + ' s');
+    }
+}
+
+// попытка улучшить броню и ремонт
+function getClickUpgradeArmor() {
+    if (money >= upgradeArmorCost) {
+        playSePlayer('se_upgrade');
+        money -= upgradeArmorCost;
+
+        maxArmor += upgradeAddArmor;
+        repairArmorAdd += upgradeAddRepair;
+
+        boardUpdate();
+        message('MAX ARMOR = ' + maxArmor.toFixed());
     }
 }
 
 // попытка ремонта брони
 function getClickRepair() {
-    if (money >= repairCost && armor < 100) {
+    if (money >= repairCost && armor < maxArmor) {
+        playSePlayer('se_upgrade');
         money -= repairCost;
 
-        armor += 50;
-        if (armor > 100) {
-            armor = 100;
+        armor += repairArmorAdd;
+        if (armor > maxArmor) {
+            armor = maxArmor;
             shardsArr.length = 0
         } else shardsArr.length = Math.floor(shardsArr.length / 2)
 
         boardUpdate();
-        message('ARMOR + 50%');
+        message('ARMOR + ' + repairArmorAdd.toFixed() + ' %');
     }
 }
 
@@ -283,13 +391,14 @@ function getClickRepair() {
  */
 
 class Shards {
-    constructor(x, y) {
-        this.img = glassShardsSprite.img;
-        this.x = x - Math.floor( glassShardsSprite.frameWidth / 2 );
-        this.y = y - Math.floor( glassShardsSprite.frameHeight / 2 );
-        this.w = glassShardsSprite.frameWidth;
-        this.h = glassShardsSprite.frameHeight;
-        this.frameX = glassShardsSprite.frameWidth * Math.floor( Math.random() * glassShardsSprite.frames );
+    constructor(x, y, isSmall) {
+        this.sprite = (isSmall) ? smallGlassShardsSprite : glassShardsSprite;
+        this.img = this.sprite.img;
+        this.x = x - Math.floor( this.sprite.frameWidth / 2 );
+        this.y = y - Math.floor( this.sprite.frameHeight / 2 );
+        this.w = this.sprite.frameWidth;
+        this.h = this.sprite.frameHeight;
+        this.frameX = this.sprite.frameWidth * Math.floor( Math.random() * this.sprite.frames );
         this.isExist = true;
     }
 
@@ -313,7 +422,7 @@ let shardsArr = [];
 
 /************************************
  * 
- *   АСТЕРОЙДЫ, ОСКОЛКИ И ЭФФЕКТЫ
+ *   АСТЕРОЙДЫ, КАМНИ И ЭФФЕКТЫ
  */
 
 //                                                               scr, frames, width, height                
@@ -337,6 +446,7 @@ const rock_silicon = new Sprite ('rock_silicon_408x51_8frames.png', 408, 51, 8);
 
 const explosionSprite = new Sprite ('explosion_6400x400_16frames.png', 6400, 400, 16);
 const glassShardsSprite = new Sprite ('glass_shards_1600x400_4frames.png', 1600, 400, 4);
+const smallGlassShardsSprite = new Sprite ('glass_shards_small_800x200_4frames.png', 800, 200, 4);
 
 /*************************
  * 
@@ -348,6 +458,7 @@ cursor.isReady = false;
 cursor.frameX = 0;
 cursor.lastFrame = cursor.frames - 1 ;
 cursor.reloadTimeout = 3 * (1000 / cursor.frames);
+cursor.reloadTimeoutScale = 0.85;
 cursor.reserveTime= 0;
 
 cursor.draw = function( frameTimeout ) {
@@ -386,14 +497,11 @@ cursor.draw = function( frameTimeout ) {
 const aim = new Sprite ('aim.png', 120, 120, 1);
 aim.x = vcx;
 aim.y = vcy;
-// на сколько пикселей прицел смещается в секунду (500/ 1000 -> 500px/1000ms)
-aim.speed = 500 / 1000;
-// на сколько увеличивается скорость приицела при прокачке
-aim.speedAdd = 25 / 1000;
+
 aim.isOnTarget = false;
 
 aim.draw = function( frameTimeout ) {
-    let speed = this.speed * frameTimeout;
+    let speed = aimingSpeed * frameTimeout;
     let dx = mouseX - this.x;
     let dy = mouseY - this.y;
 
@@ -531,20 +639,18 @@ class LaserLight {
         this.width--;
         this.stepIndex++;
         if (this.stepIndex === this.path.length) {
+            // проверка попадания в камень
+            rocksArr.forEach( rock => {
+                let dist = getDistance(rock.x, rock.y, this.targetX, this.targetY);
+                if (dist < rock.size * rock.sizeScale) rock.isExist = false;
+            });
+
+            // проверка попадания в астеройд
             asteroidsArr.forEach( asteroid => {
                 let dist = getDistance(asteroid.x, asteroid.y, this.targetX, this.targetY);
-                if (dist < asteroid.size * asteroid.sizeScale) {
-                    score += asteroid.scoreAdd;
-                    money += asteroid.scoreAdd;
-                    asteroid.isExist = false;
-                    explosionsArr.push( new Explosion(asteroid.x, asteroid.y, asteroid.sizeScale) );
-
-                    level++;
-                    boardUpdate();
-
-                    if (level >= levelToWin) win();
-                }
+                if (dist < asteroid.size * asteroid.sizeScale) asteroid.getDamage();
             });
+
             this.isExist = false;
         } 
     }
@@ -603,25 +709,186 @@ const asteroidMinStartY = Math.floor(vh / 8);
 const asteroidMaxStartY = Math.floor(asteroidMinStartY * 5);
 
 class Asteroid {
-    constructor( image, hp, scoreScale ) {
+    constructor( image, rockImage, hp, score ) {
         this.hp = hp;
-        this.scoreScale = scoreScale;
-        this.scoreAdd = scoreScale * (hp / 10);
+        this.rocks = Math.round(hp / 50);
+        this.score = score;
         this.x = getRandom( asteroidMinStartX, asteroidMaxStartX );
         this.y = getRandom( asteroidMinStartY, asteroidMaxStartY );
 
         this.vcdx = this.x - vcx; // растояние от центра 
         this.vcdy = this.y - vcy; // растояние от центра
 
-        this.stepScaleX = this.vcdx / vw * 0.05; // коэффициент смещения по оси X
-        this.stepScaleY = this.vcdy / vh * 0.05; // коэффициент смещения по оси Y
+        this.stepScaleX = this.vcdx / (100 * vw); // коэффициент смещения по оси X
+        this.stepScaleY = this.vcdy / (100 * vh); // коэффициент смещения по оси Y
 
         this.sizeScaleStep = 1 + Math.random() / 100; // коэффициент изменения размеров
-        this.sizeScale = 0.01 + Math.random() / 1000; 
+        this.sizeScale = 0.01 + Math.random() / 500; // начальный размер
         this.size = image.frameWidth > image.frameHeight ? image.frameWidth : image.frameHeight;
 
         this.img = image.img;
         this.frameSpin = 1 + Math.ceil( Math.random() * 2); // 1, 2 or 3
+        this.frames = image.frames;
+        this.frameW = image.frameWidth;
+        this.frameH = image.frameHeight;
+        this.frameCX = Math.floor(this.frameW / 2);
+        this.frameCY = Math.floor(this.frameH / 2);
+        this.frame = 0;
+        this.frameX = 0;
+        this.frameY = 0;
+
+        this.rockImage = rockImage;
+
+        this.isExist = true;
+    }
+
+    draw( frameTimeout, frame ) {
+        const dt = frameTimeout / 1000;
+        // обновляем масштаб
+
+        ctx.drawImage(
+            this.img,    // Объект Image или canvas 
+            this.frameX, // позиция X прямоуголника начала спрайта
+            this.frameY, // позиция Y прямоуголника начала спрайта
+            this.frameW, // ширена прямоуголника отображаемой части спрайта
+            this.frameH, // высота прямоуголника отображаемой части спрайта
+            this.x - this.frameCX * this.sizeScale, // позиция X начала отобрадения спрайта на canvas
+            this.y - this.frameCY * this.sizeScale, // позиция Y начала отобрадения спрайта на canvas
+            this.frameW * this.sizeScale, // ширина для отобрадения спрайта на canvas
+            this.frameH * this.sizeScale // высота для начала отобрадения спрайта на canvas
+        );
+        /*
+        ctx.beginPath();
+        ctx.strokeStyle = (this.sizeScale < 0.75) ? '#ffff00' : '#ff0000';
+        ctx.lineWidth = 2;
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.stroke();
+        */
+
+        // проверка переключения кадра и переход в начало, если это был последний кадр
+        if (frame % this.frameSpin === 0) {
+            this.frame++;
+            this.frameX = this.frameW * this.frame;
+        }
+        if (this.frame === this.frames) this.frame = 0;
+
+        // движение астеройдов
+        this.x += this.stepScaleX * dt;
+        this.y += this.stepScaleY * dt;
+        this.stepScaleX *= 1 + dt;
+        this.stepScaleY *= 1 + dt;
+
+        // обновляем масштаб
+        this.sizeScale *= this.sizeScaleStep * (1 + dt/10);
+        if (this.isExist && this.sizeScale > 1.5) {
+            playSeGame('se_glass');
+            armor -= Math.ceil(this.hp / 10);
+            if (armor <= 0) gameOver();
+            else shardsArr.push( new Shards(this.x, this.y) );
+
+            boardUpdate();
+            this.isExist = false;
+        }
+
+        // проверяем существование
+        if (this.x + this.frameW < 0
+        || this.x - this.frameW > vw
+        || this.y + this.frameH < 0
+        || this.y - this.frameH > vh) {
+            this.isExist = false;
+        }
+    }
+
+    getDamage() {
+        this.hp -= laserGunPower;
+        score += Math.ceil(this.score / this.sizeScale);
+        if (this.hp <= 0) {
+            playSeGame('se_explosion');
+            money += this.score;
+            explosionsArr.push( new Explosion(this.x, this.y, this.sizeScale) );
+            for(let i = 0; i < this.rocks; i++)
+                rocksArr.push( new Rock(this.rockImage, this.x, this.y, this.sizeScale));
+            this.isExist = false;
+
+            level++;
+            boardUpdate();
+
+            if (level >= levelToWin) win();
+            else updateAsteroidsArr();
+                
+        } else message(this.hp.toFixed() + ' hp');
+    }
+}
+// массив объектов
+let asteroidsArr = [];
+
+let addAsteroidIndex = 0;
+let addAsteroidsArr = [
+    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
+    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
+    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
+    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
+    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
+
+    {image: asteroid_silicon, rockImage: rock_silicon, hp: 120, score: 70},
+    {image: asteroid_silicon, rockImage: rock_silicon, hp: 120, score: 70},
+
+    {image: asteroid_gold,    rockImage: rock_gold,    hp: 200, score: 500}
+];
+addAsteroidsArr.sort(() => Math.random() - 0.5);
+
+function updateAsteroidsArr() {
+    if (level % 5 === 0) {
+        addAsteroidsArr.push({image: asteroid_calcium, rockImage: rock_calcium, hp: 150, score: 100});
+        addAsteroidsArr.push({image: asteroid_calcium, rockImage: rock_calcium, hp: 150, score: 100});
+        addAsteroidsArr.push({image: asteroid_silicon, rockImage: rock_silicon, hp: 120, score: 70});
+    }
+    if (level % 10 === 0) {
+        addAsteroidsArr.push({image: asteroid_carbon,  rockImage: rock_carbon,  hp: 200, score: 150});
+        addAsteroidsArr.push({image: asteroid_carbon,  rockImage: rock_carbon,  hp: 200, score: 150});
+        addAsteroidsArr.push({image: asteroid_iron,    rockImage: rock_iron,    hp: 300, score: 250});
+    }
+    if (level % 15 === 0) {
+        addAsteroidsArr.push({image: asteroid_gold,    rockImage: rock_gold,    hp: 200, score: 500});
+    }
+    addAsteroidsArr.sort(() => Math.random() - 0.5);
+} 
+
+function addNewAsteroid() {
+    let img = addAsteroidsArr[addAsteroidIndex].image;
+    let rockImg = addAsteroidsArr[addAsteroidIndex].rockImage;
+    let hp = addAsteroidsArr[addAsteroidIndex].hp;
+    let score = addAsteroidsArr[addAsteroidIndex].score;
+    asteroidsArr.push( new Asteroid(img, rockImg, hp, score) );
+
+    addAsteroidIndex++;
+    if (addAsteroidIndex === addAsteroidsArr.length) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
+    }
+}
+
+/*************
+ * 
+ *   КАМНИ
+ */
+
+class Rock {
+    constructor( image, x, y, scale ) {
+        let offsetX = Math.random() < 0.5 ? -Math.random() : Math.random();
+        let offsetY = Math.random() < 0.5 ? -Math.random() : Math.random();
+        this.x = x + offsetX;
+        this.y = y + offsetY;
+
+        this.stepScaleX = offsetX * Math.random() * 100; // коэффициент смещения по оси X
+        this.stepScaleY = offsetY * Math.random() * 100; // коэффициент смещения по оси Y
+
+        this.sizeScaleStep = 1 + Math.random() / 100; // коэффициент изменения размеров
+        this.sizeScale = scale / 2; // начальный размер
+        this.size = image.frameWidth > image.frameHeight ? image.frameWidth : image.frameHeight;
+
+        this.img = image.img;
+        this.frameSpin = 2; // 1, 2 or 3
         this.frames = image.frames;
         this.frameW = image.frameWidth;
         this.frameH = image.frameHeight;
@@ -649,6 +916,7 @@ class Asteroid {
             this.frameW * this.sizeScale, // ширина для отобрадения спрайта на canvas
             this.frameH * this.sizeScale // высота для начала отобрадения спрайта на canvas
         );
+
         // проверка переключения кадра и переход в начало, если это был последний кадр
         if (frame % this.frameSpin === 0) {
             this.frame++;
@@ -656,7 +924,7 @@ class Asteroid {
         }
         if (this.frame === this.frames) this.frame = 0;
 
-        // движение астеройдов
+        // движение
         this.x += this.stepScaleX * dt;
         this.y += this.stepScaleY * dt;
         this.stepScaleX *= 1 + dt;
@@ -664,10 +932,11 @@ class Asteroid {
 
         // обновляем масштаб
         this.sizeScale *= this.sizeScaleStep * (1 + dt/10);
-        if (this.isExist && this.sizeScale > 1.5) {
-            armor -= Math.ceil( this.hp / 50 );
+        if (this.isExist && this.sizeScale > 1) {
+            playSeGame('se_glass');
+            armor -= 1;
             if (armor <= 0) gameOver();
-            else shardsArr.push( new Shards(this.x, this.y) );
+            else shardsArr.push( new Shards(this.x, this.y, true) );
 
             boardUpdate();
             this.isExist = false;
@@ -683,63 +952,7 @@ class Asteroid {
     }
 }
 // массив объектов
-let asteroidsArr = [];
-
-let addAsteroidIndex = 0;
-let addAsteroidsArr = [
-    // image, hp, bonusScale
-    {image: asteroid_calcium, hp: 400, bonusScale: 5}, 
-    {image: asteroid_calcium, hp: 400, bonusScale: 5},
-    {image: asteroid_calcium, hp: 400, bonusScale: 5},
-    {image: asteroid_calcium, hp: 400, bonusScale: 5},
-
-    {image: asteroid_ice,     hp: 200, bonusScale: 3},
-    {image: asteroid_ice,     hp: 200, bonusScale: 3},
-    {image: asteroid_ice,     hp: 200, bonusScale: 3},
-
-    {image: asteroid_silicon, hp: 300, bonusScale: 4},
-    {image: asteroid_silicon, hp: 300, bonusScale: 4},
-    {image: asteroid_silicon, hp: 300, bonusScale: 4},
-    
-    {image: asteroid_carbon,  hp: 500, bonusScale: 6},
-    {image: asteroid_carbon,  hp: 500, bonusScale: 6},
-    {image: asteroid_carbon,  hp: 500, bonusScale: 6},
-
-    {image: asteroid_iron,    hp: 900, bonusScale: 7},
-    {image: asteroid_iron,    hp: 900, bonusScale: 7},
-
-    {image: asteroid_gold,    hp: 500, bonusScale: 12}
-];
-addAsteroidsArr.sort(() => Math.random() - 0.5);
-
-function addNewAsteroid() {
-    let img = addAsteroidsArr[addAsteroidIndex].image;
-    let hp = addAsteroidsArr[addAsteroidIndex].hp;
-    let bonusScale = addAsteroidsArr[addAsteroidIndex].bonusScale;
-    asteroidsArr.push( new Asteroid(img, hp, bonusScale) );
-
-    addAsteroidIndex++;
-    if (addAsteroidIndex === addAsteroidsArr.length) {
-        addAsteroidIndex = 0;
-        addAsteroidsArr.sort(() => Math.random() - 0.5);
-    }
-}
-
-/*
-asteroidsArr.push( new Asteroid(vcx - 350, vcy - 100, asteroid_gold, 3) );
-asteroidsArr.push( new Asteroid(vcx - 210, vcy - 100, asteroid_iron, 3) );
-asteroidsArr.push( new Asteroid(vcx -  70, vcy - 100, asteroid_calcium, 3) );
-asteroidsArr.push( new Asteroid(vcx +  70, vcy - 100, asteroid_carbon, 3) );
-asteroidsArr.push( new Asteroid(vcx + 210, vcy - 100, asteroid_ice, 3) );
-asteroidsArr.push( new Asteroid(vcx + 350, vcy - 100, asteroid_silicon, 3) );
-
-asteroidsArr.push( new Asteroid(vcx - 350, vcy + 100, rock_gold, 2) );
-asteroidsArr.push( new Asteroid(vcx - 210, vcy + 100, rock_iron, 2) );
-asteroidsArr.push( new Asteroid(vcx -  70, vcy + 100, rock_calcium, 2) );
-asteroidsArr.push( new Asteroid(vcx +  70, vcy + 100, rock_carbon, 2) );
-asteroidsArr.push( new Asteroid(vcx + 210, vcy + 100, rock_ice, 2) );
-asteroidsArr.push( new Asteroid(vcx + 350, vcy + 100, rock_silicon, 2) );
-*/
+let rocksArr = [];
 
 /*********************************
  * 
@@ -803,15 +1016,6 @@ document.addEventListener('click', () => {
 
         laserLightsArr.push( new LaserLight() );
     }
-    /*
-    if (counter_click % 2 === 0) {
-        let sound = Math.random() < 0.5 ? 'se_explosion' :'se_target';
-        playSeGame(sound);
-    } else {
-        let sound = Math.random() < 0.5 ? 'se_beep' :'se_laser';
-        playSePlayer(sound);
-    }
-    */
 });
 
 /*****************************************************
@@ -822,8 +1026,11 @@ document.addEventListener('click', () => {
 document.addEventListener('keydown', (event) => {
     switch(event.code) {
         case 'Enter': if (!isGameStart && frame === 0) gameStart(); break;
-        case 'KeyQ' : getClickUpgrade(); break;
+        case 'KeyQ' : getClickUpgradePower(); break;
+        case 'KeyW' : getClickUpgradeAiming(); break;
+        case 'KeyE' : getClickUpgradeReloading(); break;
         case 'KeyR' : getClickRepair(); break;
+        case 'KeyT' : getClickUpgradeArmor(); break;
     }
  });
 
@@ -852,8 +1059,9 @@ function animation( timeStamp ) {
     ctx.clearRect(0, 0, vw, vh);
 
     // обнавляем астеройды и уровень
-    if (frame % ( (levelToWin + 50) - level) === 0) addNewAsteroid();
-    asteroidsArr.forEach( asteroid => asteroid.draw( frameTimeout, frame ) );    
+    if (frame % ( levelToWin * 3 - level ) === 0) addNewAsteroid();
+    rocksArr.forEach( rock => rock.draw( frameTimeout, frame ) );
+    asteroidsArr.forEach( asteroid => asteroid.draw( frameTimeout, frame ) );   
 
     // обнавляем взрывы
     explosionsArr.forEach( explosion => explosion.draw( frameTimeout, frame ) );
@@ -872,6 +1080,7 @@ function animation( timeStamp ) {
 
     // удаляем ненужные объекты
     asteroidsArr = asteroidsArr.filter( asteroid => asteroid.isExist );
+    rocksArr = rocksArr.filter( rock => rock.isExist );
     explosionsArr = explosionsArr.filter( explosion => explosion.isExist );
     laserLightsArr = laserLightsArr.filter( light => light.isExist );
     shardsArr = shardsArr.filter( shards => shards.isExist );
