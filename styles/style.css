@@ -168,3 +168,9 @@ canvas {
     background-size: 24px;
     background-position: center 4px;
 }
+
+.detector {
+    background-image: url(../src/images/detect.png);
+    background-size: 24px;
+    background-position: center 4px;
+}

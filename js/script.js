@@ -191,6 +191,11 @@ let money = 1500;
 let armor = 100;
 let maxArmor = armor;
 
+// активация обноружений астеройдов
+let isDetect = false;
+// стоимость активации обнаружения
+let detectCost = 900;
+
 // добавление брони при апгрейде
 let upgradeAddArmor = 10;
 // добавление к ремонту при улучшении брони
@@ -302,6 +307,16 @@ upgradeArmorDiv.onclick = function() {
 }
 rightBoard.append(upgradeArmorDiv);
 
+// активация детектора астеройдов
+const detectorDiv = document.createElement('div');
+detectorDiv.className = 'detector';
+detectorDiv.innerHTML = `<span>${detectCost} $ (Y)</span>`;
+detectorDiv.onclick = function() {
+    isButtonOnclick = true;
+    getClickUpgradeDetector();
+}
+rightBoard.append(detectorDiv);
+
 // функция обновления информации на понелях
 function boardUpdate() {
     levelDiv.innerText = `LEVEL: ${level}`;
@@ -313,6 +328,7 @@ function boardUpdate() {
     upgradeAimingDiv.classList.toggle('grayscale', money < upgradeAimingCost);
     upgradeReloadingDiv.classList.toggle('grayscale', money < upgradeReloadingCost);
     upgradePowerDiv.classList.toggle('grayscale', money < upgradePowerCost);
+    detectorDiv.classList.toggle('grayscale', money < detectCost || isDetect);
 }
 
 // попытка улучшить силу оружия
@@ -385,6 +401,19 @@ function getClickRepair() {
     }
 }
 
+// попытка активации обнаружения астеройдов
+function getClickUpgradeDetector() {
+    if (money >= detectCost && !isDetect) {
+        playSePlayer('se_upgrade');
+        money -= detectCost;
+
+        isDetect = true;
+
+        boardUpdate();
+        message('DETECTOR IS ACTIVATED');
+    }
+}
+
 /******************************
  * 
  *   ОСКОЛКИ СТЕКЛА
@@ -432,6 +461,9 @@ const rock_gold = new Sprite ('rock_gold_408x51_8frames.png', 408, 51, 8);
 const asteroid_iron = new Sprite ('asteroid_iron_2639x109_29frames.png', 2639, 109, 29);
 const rock_iron = new Sprite ('rock_iron_408x51_8frames.png', 408, 51, 8);
 
+const asteroid_white = new Sprite ('asteroid_white_2639x109_29frames.png', 2639, 109, 29);
+const rock_white = new Sprite ('rock_white_408x51_8frames.png', 408, 51, 8);
+
 const asteroid_calcium = new Sprite ('asteroid_calcium_8192x128_64frames.png', 8192, 128, 64);
 const rock_calcium = new Sprite ('rock_calcium_408x51_8frames.png', 408, 51, 8);
 
@@ -447,6 +479,30 @@ const rock_silicon = new Sprite ('rock_silicon_408x51_8frames.png', 408, 51, 8);
 const explosionSprite = new Sprite ('explosion_6400x400_16frames.png', 6400, 400, 16);
 const glassShardsSprite = new Sprite ('glass_shards_1600x400_4frames.png', 1600, 400, 4);
 const smallGlassShardsSprite = new Sprite ('glass_shards_small_800x200_4frames.png', 800, 200, 4);
+
+/**************
+ * 
+ *   РАДАР
+ */
+
+const detector = new Sprite ('detector_1200x150_8frames.png', 1200, 150, 8);
+ 
+detector.draw = function( x, y, size ) {
+    let frameX = Math.round(size / 0.2);
+ 
+    ctx.drawImage(
+        this.img,    // Объект Image или canvas 
+        frameX * this.frameWidth, // позиция X прямоуголника начала спрайта
+        0, // позиция Y прямоуголника начала спрайта
+        150, // ширена прямоуголника отображаемой части спрайта
+        150, // высота прямоуголника отображаемой части спрайта
+        x - 75, // позиция X начала отобрадения спрайта на canvas
+        y - 75, // позиция Y начала отобрадения спрайта на canvas
+        150, // ширина для отобрадения спрайта на canvas
+        150  // высота для начала отобрадения спрайта на canvas
+    );
+}
+let detectorsArr = [];
 
 /*************************
  * 
@@ -757,6 +813,7 @@ class Asteroid {
             this.frameW * this.sizeScale, // ширина для отобрадения спрайта на canvas
             this.frameH * this.sizeScale // высота для начала отобрадения спрайта на canvas
         );
+        if (isDetect) detector.draw(this.x, this.y, this.sizeScale);
         /*
         ctx.beginPath();
         ctx.strokeStyle = (this.sizeScale < 0.75) ? '#ffff00' : '#ff0000';
@@ -850,6 +907,10 @@ function updateAsteroidsArr() {
     }
     if (level % 15 === 0) {
         addAsteroidsArr.push({image: asteroid_gold,    rockImage: rock_gold,    hp: 200, score: 500});
+    }
+    if (level % 20 === 0) {
+        addAsteroidsArr.push({image: asteroid_iron,    rockImage: rock_iron,    hp: 300, score: 250});
+        addAsteroidsArr.push({image: asteroid_white,   rockImage: rock_white,   hp: 450, score: 300});
     }
     addAsteroidsArr.sort(() => Math.random() - 0.5);
 } 
@@ -1031,6 +1092,7 @@ document.addEventListener('keydown', (event) => {
         case 'KeyE' : getClickUpgradeReloading(); break;
         case 'KeyR' : getClickRepair(); break;
         case 'KeyT' : getClickUpgradeArmor(); break;
+        case 'KeyY' : getClickUpgradeDetector(); break;
     }
  });
 
@@ -1059,7 +1121,7 @@ function animation( timeStamp ) {
     ctx.clearRect(0, 0, vw, vh);
 
     // обнавляем астеройды и уровень
-    if (frame % ( levelToWin * 3 - level ) === 0) addNewAsteroid();
+    if (frame % ( levelToWin * 3 - level * 2 ) === 0) addNewAsteroid();
     rocksArr.forEach( rock => rock.draw( frameTimeout, frame ) );
     asteroidsArr.forEach( asteroid => asteroid.draw( frameTimeout, frame ) );   
 
