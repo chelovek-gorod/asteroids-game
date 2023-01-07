@@ -1,8 +1,10 @@
 'use strict';
 
-/*************************
+let isAllVariablesDefined = false;
+
+/*****************
  * 
- *   ПОДГОТОВКА ХОЛСТА
+ *   ПОДГОТОВКА 
  */
 
 const canvas = document.createElement('canvas'); // создаём холст
@@ -10,21 +12,77 @@ const ctx = canvas.getContext('2d'); // получаем контекст (сп�
 
 let vw, vh, vcx, vcy; // создаём переменные (vw - ширина холста, vh - высота холста, vcx и vcy - ценрры по X и Y)
 const scale = 2; // определяем масштабирование (в 1ом пикселе будет 2*2 пикселя)
-const canvasTegWidth = window.innerWidth; // определяем ширину окна браузера 
-const canvasTegHeight = window.innerHeight; // определяем высоту окна браузера 
 
-canvas.width = vw = canvasTegWidth * scale; // задаём ширину холста (размер окна * масштаб)
-canvas.height = vh = canvasTegHeight * scale; // задаём высоту холста (размер окна * масштаб)
-canvas.style.width = canvasTegWidth + 'px'; // задаём в CSS ширину холста
-canvas.style.height = canvasTegHeight + 'px'; // задаём в CSS высоту холста
-vcx = Math.floor(vw / 2); // определяем координату X центра холста
-vcy = Math.floor(vh / 2); // определяем координату Y центра холста
+// следим за изменениями размеров экрана
+window.addEventListener('resize', updateSizes);
+function updateSizes() {
+    const canvasTegWidth = window.innerWidth; // определяем ширину окна браузера 
+    const canvasTegHeight = window.innerHeight; // определяем высоту окна браузера 
+
+    canvas.width = vw = canvasTegWidth * scale; // задаём ширину холста (размер окна * масштаб)
+    canvas.height = vh = canvasTegHeight * scale; // задаём высоту холста (размер окна * масштаб)
+    canvas.style.width = canvasTegWidth + 'px'; // задаём в CSS ширину холста
+    canvas.style.height = canvasTegHeight + 'px'; // задаём в CSS высоту холста
+    vcx = Math.floor(vw / 2); // определяем координату X центра холста
+    vcy = Math.floor(vh / 2); // определяем координату Y центра холста
+
+    // обновляем позиции оружия
+    if(isAllVariablesDefined) {
+        gunBase.updatePosition();
+        laserGun.updatePosition();
+    }
+}
+updateSizes();
+
+//
+function enterFullScreen() {
+    if(document.body.requestFullscreen) {
+        document.body.requestFullscreen();
+    }else if (document.body.mozRequestFullScreen) {
+        document.body.mozRequestFullScreen();     // Firefox
+    }else if (document.body.webkitRequestFullscreen) {
+        document.body.webkitRequestFullscreen();  // Safari
+    }else if(document.body.msRequestFullscreen) {
+        document.body.msRequestFullscreen();      // IE/Edge
+    }
+};
+//
+function exitFullscreen() {
+    if(document.exitFullscreen) {
+        document.exitFullscreen();
+    } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+    } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+    }
+};
 
 // массив файлов загрузки
 let loadingsArr = [];
+// функция показа блоков с сообщениями
+const loadStateDiv = document.createElement('div');
+loadStateDiv.className = 'loading';
+loadStateDiv.innerText = 'loading';
+document.body.append(loadStateDiv);
+function loadState() {
+    loadStateDiv.innerText = `${loadingsArr.length} files loading...`;
+}
 
 // старт игры
 let isGameStart = false;
+
+// проверка тач-скрина
+let isTouchScreen = false;
+function TestTouchScreen() {
+    if( !!('ontouchstart' in window) || window.innerWidth < 1280 ) {
+        const shutDiv = document.createElement('div');
+        shutDiv.className = 'shut';
+        shutDiv.onclick = laserShut;
+        document.body.append(shutDiv);
+
+        isTouchScreen = true;
+    }
+}
 
 /*************************
  * 
@@ -66,6 +124,26 @@ function playBgMusic() {
     BG_MUSIC.addEventListener('ended', playBgMusic);
 }
 
+const soundEffectsArr = ['se_beep', 'se_explosion', 'se_glass', 'se_laser', 'se_target', 'se_upgrade'];
+class Sound {
+    constructor (sound) {
+        this.audio = new Audio();
+        this.audio.src = SOUNDS_PATH + sound +'.mp3';
+        this.isLoaded = false;
+        this.audio.oncanplaythrough = () => {
+            this.isLoaded = true;
+            // удаляем загруженный звук из массива загрузок
+            loadingsArr = loadingsArr.filter( object => !object.isLoaded );
+            if (loadingsArr.length === 0) gameReady(); // если в массиве загрузок больше нет файлов - вызываем функцию "gameReady()"
+            else loadState();
+        };
+        loadingsArr.push(this);
+    }
+}
+
+bgMusicsArr.forEach( audio => new Sound(audio) );
+soundEffectsArr.forEach( audio => new Sound(audio) );
+
 /*************************
  * 
  *   ЗАГРУЗКА СПРАЙТОВ
@@ -91,7 +169,7 @@ class Sprite {
             // удаляем загруженную картинку из массива загружаемых картинок
             loadingsArr = loadingsArr.filter( sprite => !sprite.isLoaded );
             if (loadingsArr.length === 0) gameReady(); // если в массиве загрузок больше нет файлов - вызываем функцию "gameReady()"
-            else console.log(loadingsArr); // иначе - выводим в консоль массив, с изображениями, ожидающими загрузки
+            else loadState();
         };
         // добавляем в массив загрузак картинку, ожидающую загрузку
         loadingsArr.push(this);
@@ -105,7 +183,7 @@ class Sprite {
 
 // вызываем, когда все картинки загрузятся
 function gameReady() {
-    console.log('ALL SOURCES IS LOADED');
+    loadStateDiv.remove();
     // создаём кнопку "START"
     const startButton = document.createElement('div');
     startButton.id = 'startButton';
@@ -119,11 +197,18 @@ function gameStart() {
     // удаляем кнопку "START"
     document.getElementById('startButton').remove();
 
+    // входим в полноэкранный режим
+    enterFullScreen();
+    // обновляем размеры экрана
+    updateSizes();
+
     // добавляем на экран холст и панели с информацией и кнопками (leftBoard и rightBoard)
     document.body.append(canvas);
     document.body.append(leftBoard);
     document.body.append(rightBoard);
     boardUpdate(); // запускаем функцию обновления информации на понелях (leftBoard и rightBoard)
+
+    TestTouchScreen(); // проверка тач-скрина
 
     // запускаем анимацию с ~60 fps
     requestAnimationFrame( animation );
@@ -138,6 +223,11 @@ function gameStart() {
 
 // функция проигрыша
 function gameOver() {
+    // выходим из полноэкранного режим
+    exitFullscreen();
+    // обновляем размеры экрана
+    updateSizes();
+
     isGameStart = false; // меняем состояние игры (останавливаем обновление холста)
     ctx.clearRect(0, 0, vw, vh); // числим весь холст
 
@@ -153,6 +243,11 @@ function gameOver() {
 
 // функция победы
 function win() {
+    // выходим из полноэкранного режим
+    exitFullscreen();
+    // обновляем размеры экрана
+    updateSizes();
+
     isGameStart = false; // меняем состояние игры (останавливаем обновление холста)
     ctx.clearRect(0, 0, vw, vh); // числим весь холст
 
@@ -187,7 +282,7 @@ let score = 0;
 let level = 0;
 
 // начальные деньги и броня
-let money = 1500;
+let money = 1000;
 let armor = 100;
 let maxArmor = armor;
 
@@ -220,7 +315,7 @@ let distanceToScreenCenter = Math.sqrt( Math.pow(vcx, 2) + Math.pow(vcy, 2) );
 // скорость наведения оружия (пикселей в секунду (1000ms))
 let aimingSpeed = (distanceToScreenCenter / 5) / 1000;
 // коэффициент увеличения скорости наведения
-let aimingSpeedScale = 1.2;
+let aimingSpeedScale = 1.1;
 // стоимость улучшения наведения оружия
 let upgradeAimingCost = 200;
 
@@ -598,6 +693,10 @@ aim.draw = function( frameTimeout ) {
 const gunBase = new Sprite ('gun_base_320x100x1frame.png', 320, 100, 1);
 gunBase.x = vcx - 160;
 gunBase.y = vh - 100;
+gunBase.updatePosition = function() {
+    gunBase.x = vcx - 160;
+    gunBase.y = vh - 100;
+}
 gunBase.draw = function() {
     ctx.drawImage( 
         this.img,    // Объект Image или canvas 
@@ -617,6 +716,13 @@ laserGun.angle = 0;
 laserGun.x = vcx;
 laserGun.y = vh;
 laserGun.maxDistancePoint = Math.sqrt( Math.pow( vcx, 2) + Math.pow( vh, 2) );
+
+laserGun.updatePosition = function() {
+    laserGun.angle = 0;
+    laserGun.x = vcx;
+    laserGun.y = vh;
+    laserGun.maxDistancePoint = Math.sqrt( Math.pow( vcx, 2) + Math.pow( vh, 2) );
+}
 
 laserGun.draw = function() {
 
@@ -645,6 +751,17 @@ laserGun.draw = function() {
 
     // возвращаем исходное состояние холста
     ctx.setTransform(1,0,0,1,0,0);
+}
+
+// выстрел лазера
+function laserShut() {
+    if (cursor.isReady) {
+        playSePlayer( 'se_laser' );
+        cursor.frameX = 0;
+        cursor.isReady = false;
+    
+        laserLightsArr.push( new LaserLight() );
+    }
 }
 
 // луч
@@ -880,39 +997,167 @@ class Asteroid {
 let asteroidsArr = [];
 
 let addAsteroidIndex = 0;
-let addAsteroidsArr = [
-    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
-    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
-    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
-    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
-    {image: asteroid_ice,     rockImage: rock_ice,     hp: 100, score: 50},
+let addAsteroidsArr = [];
 
-    {image: asteroid_silicon, rockImage: rock_silicon, hp: 120, score: 70},
-    {image: asteroid_silicon, rockImage: rock_silicon, hp: 120, score: 70},
+// все варианты астеройдов
+const asteroid_ice_obj =     {image: asteroid_ice,     rockImage: rock_ice,     hp: 100,  score: 50};
+const asteroid_silicon_obj = {image: asteroid_silicon, rockImage: rock_silicon, hp: 150,  score: 70};
+const asteroid_calcium_obj = {image: asteroid_calcium, rockImage: rock_calcium, hp: 250,  score: 100};
+const asteroid_carbon_obj =  {image: asteroid_carbon,  rockImage: rock_carbon,  hp: 400,  score: 150};
+const asteroid_iron_obj =    {image: asteroid_iron,    rockImage: rock_iron,    hp: 700,  score: 200};
+const asteroid_white_obj =   {image: asteroid_white,   rockImage: rock_white,   hp: 1200, score: 300};
+const asteroid_gold_obj =    {image: asteroid_gold,    rockImage: rock_gold,    hp: 400,  score: 500};
 
-    {image: asteroid_gold,    rockImage: rock_gold,    hp: 200, score: 500}
-];
+// функция добавления астеройдов
+function addAsteroidsTypeNumbers( type, number ) {
+    for (let i = 0; i < number; i++) addAsteroidsArr.push( type );
+}
+
+addAsteroidsTypeNumbers( asteroid_ice_obj,     5 );
+addAsteroidsTypeNumbers( asteroid_silicon_obj, 0 );
+addAsteroidsTypeNumbers( asteroid_calcium_obj, 0 );
+addAsteroidsTypeNumbers( asteroid_carbon_obj,  0 );
+addAsteroidsTypeNumbers( asteroid_iron_obj,    0 );
+addAsteroidsTypeNumbers( asteroid_white_obj,   0 );
+addAsteroidsTypeNumbers( asteroid_gold_obj,    1 );
+
 addAsteroidsArr.sort(() => Math.random() - 0.5);
 
 function updateAsteroidsArr() {
-    if (level % 5 === 0) {
-        addAsteroidsArr.push({image: asteroid_calcium, rockImage: rock_calcium, hp: 150, score: 100});
-        addAsteroidsArr.push({image: asteroid_calcium, rockImage: rock_calcium, hp: 150, score: 100});
-        addAsteroidsArr.push({image: asteroid_silicon, rockImage: rock_silicon, hp: 120, score: 70});
+    if (level === 10) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr = [];
+                                                     //7
+        addAsteroidsTypeNumbers( asteroid_ice_obj,     4 );
+        addAsteroidsTypeNumbers( asteroid_silicon_obj, 2 );
+        addAsteroidsTypeNumbers( asteroid_calcium_obj, 0 );
+        addAsteroidsTypeNumbers( asteroid_carbon_obj,  0 );
+        addAsteroidsTypeNumbers( asteroid_iron_obj,    0 );
+        addAsteroidsTypeNumbers( asteroid_white_obj,   0 );
+        addAsteroidsTypeNumbers( asteroid_gold_obj,    1 );
+
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
     }
-    if (level % 10 === 0) {
-        addAsteroidsArr.push({image: asteroid_carbon,  rockImage: rock_carbon,  hp: 200, score: 150});
-        addAsteroidsArr.push({image: asteroid_carbon,  rockImage: rock_carbon,  hp: 200, score: 150});
-        addAsteroidsArr.push({image: asteroid_iron,    rockImage: rock_iron,    hp: 300, score: 250});
+
+    if (level === 20) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr = [];
+                                                     //8
+        addAsteroidsTypeNumbers( asteroid_ice_obj,     3 );
+        addAsteroidsTypeNumbers( asteroid_silicon_obj, 2 );
+        addAsteroidsTypeNumbers( asteroid_calcium_obj, 2 );
+        addAsteroidsTypeNumbers( asteroid_carbon_obj,  0 );
+        addAsteroidsTypeNumbers( asteroid_iron_obj,    0 );
+        addAsteroidsTypeNumbers( asteroid_white_obj,   0 );
+        addAsteroidsTypeNumbers( asteroid_gold_obj,    1 );
+
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
     }
-    if (level % 15 === 0) {
-        addAsteroidsArr.push({image: asteroid_gold,    rockImage: rock_gold,    hp: 200, score: 500});
+
+    if (level === 30) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr = [];
+                                                     //9
+        addAsteroidsTypeNumbers( asteroid_ice_obj,     2 );
+        addAsteroidsTypeNumbers( asteroid_silicon_obj, 3 );
+        addAsteroidsTypeNumbers( asteroid_calcium_obj, 2 );
+        addAsteroidsTypeNumbers( asteroid_carbon_obj,  0 );
+        addAsteroidsTypeNumbers( asteroid_iron_obj,    0 );
+        addAsteroidsTypeNumbers( asteroid_white_obj,   0 );
+        addAsteroidsTypeNumbers( asteroid_gold_obj,    2 );
+
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
     }
-    if (level % 20 === 0) {
-        addAsteroidsArr.push({image: asteroid_iron,    rockImage: rock_iron,    hp: 300, score: 250});
-        addAsteroidsArr.push({image: asteroid_white,   rockImage: rock_white,   hp: 450, score: 300});
+
+    if (level === 40) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr = [];
+                                                     //10
+        addAsteroidsTypeNumbers( asteroid_ice_obj,     0 );
+        addAsteroidsTypeNumbers( asteroid_silicon_obj, 3 );
+        addAsteroidsTypeNumbers( asteroid_calcium_obj, 3 );
+        addAsteroidsTypeNumbers( asteroid_carbon_obj,  2 );
+        addAsteroidsTypeNumbers( asteroid_iron_obj,    0 );
+        addAsteroidsTypeNumbers( asteroid_white_obj,   0 );
+        addAsteroidsTypeNumbers( asteroid_gold_obj,    2 );
+
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
     }
-    addAsteroidsArr.sort(() => Math.random() - 0.5);
+
+    if (level === 50) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr = [];
+                                                     //12
+        addAsteroidsTypeNumbers( asteroid_ice_obj,     0 );
+        addAsteroidsTypeNumbers( asteroid_silicon_obj, 2 );
+        addAsteroidsTypeNumbers( asteroid_calcium_obj, 4 );
+        addAsteroidsTypeNumbers( asteroid_carbon_obj,  3 );
+        addAsteroidsTypeNumbers( asteroid_iron_obj,    0 );
+        addAsteroidsTypeNumbers( asteroid_white_obj,   0 );
+        addAsteroidsTypeNumbers( asteroid_gold_obj,    3 );
+
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
+    }
+
+    if (level === 60) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr = [];
+                                                     //15
+        addAsteroidsTypeNumbers( asteroid_ice_obj,     0 );
+        addAsteroidsTypeNumbers( asteroid_silicon_obj, 2 );
+        addAsteroidsTypeNumbers( asteroid_calcium_obj, 4 );
+        addAsteroidsTypeNumbers( asteroid_carbon_obj,  3 );
+        addAsteroidsTypeNumbers( asteroid_iron_obj,    2 );
+        addAsteroidsTypeNumbers( asteroid_white_obj,   0 );
+        addAsteroidsTypeNumbers( asteroid_gold_obj,    4 );
+
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
+    }
+
+    if (level === 70) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr = [];
+                                                     //19
+        addAsteroidsTypeNumbers( asteroid_ice_obj,     0 );
+        addAsteroidsTypeNumbers( asteroid_silicon_obj, 0 );
+        addAsteroidsTypeNumbers( asteroid_calcium_obj, 5 );
+        addAsteroidsTypeNumbers( asteroid_carbon_obj,  4 );
+        addAsteroidsTypeNumbers( asteroid_iron_obj,    4 );
+        addAsteroidsTypeNumbers( asteroid_white_obj,   1 );
+        addAsteroidsTypeNumbers( asteroid_gold_obj,    5 );
+
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
+    }
+
+    if (level === 80) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr = [];
+                                                     //24
+        addAsteroidsTypeNumbers( asteroid_ice_obj,     0 );
+        addAsteroidsTypeNumbers( asteroid_silicon_obj, 0 );
+        addAsteroidsTypeNumbers( asteroid_calcium_obj, 5 );
+        addAsteroidsTypeNumbers( asteroid_carbon_obj,  6 );
+        addAsteroidsTypeNumbers( asteroid_iron_obj,    5 );
+        addAsteroidsTypeNumbers( asteroid_white_obj,   2 );
+        addAsteroidsTypeNumbers( asteroid_gold_obj,    6 );
+
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
+    }
+
+    if (level === 90) {
+        addAsteroidIndex = 0;
+        addAsteroidsArr = [];
+                                                     //30
+        addAsteroidsTypeNumbers( asteroid_ice_obj,     0 );
+        addAsteroidsTypeNumbers( asteroid_silicon_obj, 0 );
+        addAsteroidsTypeNumbers( asteroid_calcium_obj, 5 );
+        addAsteroidsTypeNumbers( asteroid_carbon_obj,  9 );
+        addAsteroidsTypeNumbers( asteroid_iron_obj,    6 );
+        addAsteroidsTypeNumbers( asteroid_white_obj,   3 );
+        addAsteroidsTypeNumbers( asteroid_gold_obj,    7 );
+
+        addAsteroidsArr.sort(() => Math.random() - 0.5);
+    }
 } 
 
 function addNewAsteroid() {
@@ -1070,13 +1315,7 @@ let isButtonOnclick = false;
 
 document.addEventListener('click', () => {
     if (isButtonOnclick) isButtonOnclick = false;
-    else if (cursor.isReady) {
-        playSePlayer( 'se_laser' );
-        cursor.frameX = 0;
-        cursor.isReady = false;
-
-        laserLightsArr.push( new LaserLight() );
-    }
+    else if (!isTouchScreen) laserShut();
 });
 
 /*****************************************************
@@ -1121,7 +1360,7 @@ function animation( timeStamp ) {
     ctx.clearRect(0, 0, vw, vh);
 
     // обнавляем астеройды и уровень
-    if (frame % ( levelToWin * 3 - level * 2 ) === 0) addNewAsteroid();
+    if (frame % ( levelToWin * 5 - level * 4 ) === 0) addNewAsteroid();
     rocksArr.forEach( rock => rock.draw( frameTimeout, frame ) );
     asteroidsArr.forEach( asteroid => asteroid.draw( frameTimeout, frame ) );   
 
@@ -1172,3 +1411,4 @@ function animation( timeStamp ) {
     // запускаем занова анимацию с 60 fps
     if (isGameStart) requestAnimationFrame( animation );
 }
+isAllVariablesDefined = true;
